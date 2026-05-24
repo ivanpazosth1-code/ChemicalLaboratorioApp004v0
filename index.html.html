@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manejo del sistema de filtración</title>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-white min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Iconos SVG Inline (Evita dependencias externas y asegura que funcionen en Vercel) ---
+        const IconCheckCircle = ({ className = "w-6 h-6" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        );
+
+        const IconCircle = ({ className = "w-6 h-6" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        );
+
+        const IconRefresh = ({ className = "w-5 h-5" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+        );
+
+        const IconChevronRight = ({ className = "w-5 h-5" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+        );
+
+        // --- Datos de los Procesos ---
+        const PROCESSES = [
+            {
+                id: 'aspiracion-filtrando',
+                name: 'Aspiración Filtrando',
+                steps: [
+                    { label: 'Verificar que el motor esté:', value: 'Apagado' },
+                    { label: 'Abrir las válvulas requeridas:', value: 'Toma de succión, inyectores' },
+                    { label: 'Cerrar las válvulas requeridas:', value: 'Desnatador, drenaje sumergido, desagüe' },
+                    { label: 'Seleccionar la función en la llave selectora:', value: 'Filter' },
+                    { label: 'Prender el motor:', value: 'Encendido' }
+                ]
+            },
+            {
+                id: 'recirculacion',
+                name: 'Recirculación',
+                steps: [
+                    { label: 'Verificar que el motor esté:', value: 'Apagado' },
+                    { label: 'Abrir las válvulas requeridas:', value: 'Desnatador, drenaje sumergido, inyectores' },
+                    { label: 'Cerrar las válvulas requeridas:', value: 'Toma de succión, desagüe' },
+                    { label: 'Seleccionar la función en la llave selectora:', value: 'Recirculate' },
+                    { label: 'Prender el motor:', value: 'Encendido' }
+                ]
+            },
+            {
+                id: 'filtracion',
+                name: 'Filtración',
+                steps: [
+                    { label: 'Verificar que el motor esté:', value: 'Apagado' },
+                    { label: 'Abrir las válvulas requeridas:', value: 'Desnatador, drenaje sumergido, inyectores' },
+                    { label: 'Cerrar las válvulas requeridas:', value: 'Toma de succión, desagüe' },
+                    { label: 'Seleccionar la función en la llave selectora:', value: 'Filter' },
+                    { label: 'Prender el motor:', value: 'Encendido' }
+                ]
+            },
+            {
+                id: 'lavado-filtro',
+                name: 'Lavado del Filtro',
+                steps: [
+                    { label: 'Verificar que el motor esté:', value: 'Apagado' },
+                    { label: 'Abrir las válvulas requeridas:', value: 'Drenaje sumergido, toma de succión, desagüe' },
+                    { label: 'Cerrar las válvulas requeridas:', value: 'Desnatador, inyectores' },
+                    { label: 'Seleccionar la función en la llave selectora:', value: 'Backwash' },
+                    { label: 'Prender el motor:', value: 'Encendido (tiempo según el visor)' },
+                    { label: 'Verificar que el motor esté:', value: 'Apagado' },
+                    { label: 'Seleccionar la función en la llave selectora:', value: 'Rinse (tiempo según el visor)' },
+                    { label: 'Prender el motor:', value: 'Encendido' }
+                ]
+            },
+            {
+                id: 'aspiracion-caneria',
+                name: 'Aspiración Botando a la Cañería',
+                steps: [
+                    { label: 'Verificar que el motor esté:', value: 'Apagado' },
+                    { label: 'Abrir las válvulas requeridas:', value: 'Toma de succión, desagüe' },
+                    { label: 'Cerrar las válvulas requeridas:', value: 'Desnatador, drenaje sumergido, inyectores' },
+                    { label: 'Seleccionar la función en la llave selectora:', value: 'Waste' },
+                    { label: 'Prender el motor:', value: 'Encendido' }
+                ]
+            },
+            {
+                id: 'vaciado',
+                name: 'Vaciado',
+                steps: [
+                    { label: 'Verificar que el motor esté:', value: 'Apagado' },
+                    { label: 'Abrir las válvulas requeridas:', value: 'Drenaje sumergido, desagüe' },
+                    { label: 'Cerrar las válvulas requeridas:', value: 'Desnatador, toma de succión, inyectores' },
+                    { label: 'Seleccionar la función en la llave selectora:', value: 'Waste' },
+                    { label: 'Prender el motor:', value: 'Encendido' }
+                ]
+            }
+        ];
+
+        function App() {
+            // Estado persistente
+            const [selectedProcessId, setSelectedProcessId] = useState(() => {
+                const saved = localStorage.getItem('chemical-app-process');
+                return saved || null;
+            });
+            
+            const [checkedSteps, setCheckedSteps] = useState(() => {
+                const saved = localStorage.getItem('chemical-app-steps');
+                return saved ? JSON.parse(saved) : [];
+            });
+
+            // Guardar estado en LocalStorage al cambiar
+            useEffect(() => {
+                if (selectedProcessId) {
+                    localStorage.setItem('chemical-app-process', selectedProcessId);
+                    localStorage.setItem('chemical-app-steps', JSON.stringify(checkedSteps));
+                } else {
+                    localStorage.removeItem('chemical-app-process');
+                    localStorage.removeItem('chemical-app-steps');
+                }
+            }, [selectedProcessId, checkedSteps]);
+
+            const activeProcess = PROCESSES.find(p => p.id === selectedProcessId);
+            const isCompleted = activeProcess && checkedSteps.length === activeProcess.steps.length;
+
+            const handleSelectProcess = (id) => {
+                setSelectedProcessId(id);
+                setCheckedSteps([]);
+            };
+
+            const toggleStep = (index) => {
+                setCheckedSteps(prev => {
+                    if (prev.includes(index)) {
+                        return prev.filter(i => i !== index);
+                    } else {
+                        return [...prev, index];
+                    }
+                });
+            };
+
+            const resetApp = () => {
+                setSelectedProcessId(null);
+                setCheckedSteps([]);
+            };
+
+            return (
+                <div className="w-full max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 font-sans">
+                    
+                    {/* ENCABEZADO */}
+                    <header className="flex flex-col-reverse sm:flex-row justify-between items-start sm:items-center mb-8 pb-6 border-b border-slate-200 gap-4">
+                        <div className="flex-1">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
+                                Manejo del sistema de filtración
+                            </h1>
+                            <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                                En esta aplicación podrás hacer una verificación paso a paso durante el manejo de válvulas en cada una de las funciones
+                            </p>
+                        </div>
+                        <img 
+                            src="https://i.postimg.cc/jdPC3FR0/logo-chemical.jpg" 
+                            alt="Chemical" 
+                            className="h-16 sm:h-20 object-contain shrink-0"
+                        />
+                    </header>
+
+                    {/* CONTENIDO PRINCIPAL */}
+                    <main className="min-h-[400px]">
+                        {!activeProcess ? (
+                            <div className="animate-fade-in transition-all duration-300">
+                                <h2 className="text-lg font-semibold text-slate-800 mb-4">
+                                    Selecciona el proceso a realizar:
+                                </h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {PROCESSES.map(proc => (
+                                        <button 
+                                            key={proc.id}
+                                            onClick={() => handleSelectProcess(proc.id)}
+                                            className="flex items-center justify-between text-left w-full p-4 border border-slate-200 rounded-xl hover:border-indigo-500 hover:shadow-md transition-all duration-300 bg-white group active:scale-95 text-slate-700"
+                                        >
+                                            <span className="font-medium">{proc.name}</span>
+                                            <IconChevronRight className="w-5 h-5 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="animate-fade-in transition-all duration-300">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                        {activeProcess.name}
+                                    </h2>
+                                    <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                                        Paso {checkedSteps.length} de {activeProcess.steps.length}
+                                    </span>
+                                </div>
+                                
+                                <div className="space-y-3 mb-8">
+                                    {activeProcess.steps.map((step, index) => {
+                                        const isChecked = checkedSteps.includes(index);
+                                        return (
+                                            <button
+                                                key={index}
+                                                onClick={() => toggleStep(index)}
+                                                className={`w-full flex items-start p-4 border rounded-xl text-left transition-all duration-300 select-none active:scale-[0.99]
+                                                    ${isChecked ? 'border-emerald-500 bg-white opacity-60' : 'border-slate-200 bg-white hover:border-slate-300 shadow-sm'}
+                                                `}
+                                            >
+                                                <div className={`mt-0.5 mr-4 shrink-0 transition-colors duration-300 ${isChecked ? 'text-emerald-500' : 'text-slate-300'}`}>
+                                                    {isChecked ? <IconCheckCircle className="w-6 h-6" /> : <IconCircle className="w-6 h-6" />}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <span className={`text-sm sm:text-base font-semibold block transition-colors duration-300 ${isChecked ? 'text-emerald-700 line-through' : 'text-slate-900'}`}>
+                                                        {index + 1}. {step.label}
+                                                    </span>
+                                                    <span className={`text-sm sm:text-base block mt-0.5 transition-colors duration-300 ${isChecked ? 'text-slate-500 line-through' : 'text-indigo-700 font-medium'}`}>
+                                                        {step.value}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* BOTONERA */}
+                                <div className="pt-6 border-t border-slate-200">
+                                    <button 
+                                        onClick={resetApp}
+                                        className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-medium transition-all duration-300 active:scale-95 border
+                                            ${isCompleted 
+                                                ? 'bg-indigo-600 text-white border-transparent hover:bg-indigo-700 shadow-md' 
+                                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}
+                                        `}
+                                    >
+                                        <IconRefresh className="w-5 h-5" />
+                                        <span>Limpiar y volver a iniciar</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* PIE DE PÁGINA */}
+                    <footer className="mt-16 pt-8 border-t border-slate-200 text-xs text-slate-500 leading-relaxed text-center sm:text-left">
+                        <p>
+                            Propiedad de Chemical laboratorio (Classco, marca registrada) para el entrenamiento “operación y mantenimiento de piscinas” IQ Iván Pazos Guevara. 
+                        </p>
+                        <p className="mt-1">
+                            Contacto: <a href="https://wa.me/573164925462?text=Hola!%20Vengo%20de%20la%20calculadora%2C%20quiero%20saber%20m%C3%A1s%20sobre..." target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">WhatsApp</a>, Cali, Colombia. 
+                            Página Web: <a href="http://www.chemical.com.co" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">www.chemical.com.co</a> 
+                            <span className="mx-1">|</span>
+                            Catálogo: <a href="https://biocleaner.ecometri.shop/573007292928" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">Ver Catálogo</a>
+                        </p>
+                    </footer>
+
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
